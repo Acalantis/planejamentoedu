@@ -25,11 +25,11 @@ modo_impressao = st.toggle("Modo impressão (para print/PDF)")
 if modo_impressao:
     st.markdown("""
         <style>
-        /* Esconde campos de entrada */
+        /* ESCONDE APENAS CAMPOS DE ENTRADA (NÃO textos, NÃO métricas) */
         textarea,
         input[type="number"],
         div[data-baseweb="input"],
-        label {
+        div[data-baseweb="textarea"] {
             display: none !important;
         }
 
@@ -37,6 +37,11 @@ if modo_impressao:
         .pagina-contas-pagas {
             page-break-before: always;
             break-before: page;
+        }
+
+        @page {
+            size: A4 portrait;
+            margin: 12mm;
         }
         </style>
     """, unsafe_allow_html=True)
