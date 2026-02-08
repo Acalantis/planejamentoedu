@@ -1,221 +1,220 @@
 import streamlit as st
 import pandas as pd
-from datetime import timedelta
 from io import StringIO
+from datetime import datetime
+import re
 import locale
 
 # =============================
 # CONFIGURAÇÃO
 # =============================
-st.set_page_config(page_title="Financeiro", layout="wide")
-st.title("📊 Painel Financeiro")
+st.set_page_config(page_title="Planejamento Financeiro", layout="wide")
+st.title("📊 Planejamento Financeiro")
 
 try:
-    locale.setlocale(locale.LC_TIME, "pt_BR.UTF-8")
+    locale.setlocale(locale.LC_ALL, "pt_BR.UTF-8")
 except:
     pass
 
 # =============================
-# SESSION STATE
+# VISUALIZAÇÃO / MODO IMPRESSÃO
 # =============================
-if "etapa" not in st.session_state:
-    st.session_state["etapa"] = 1
+st.markdown("### 🖨️ Visualização")
+modo_impressao = st.toggle("Modo impressão (para print/PDF)")
 
-if "texto_receber" not in st.session_state:
-    st.session_state["texto_receber"] = ""
+if modo_impressao:
+    st.markdown("""
+        <style>
+        /* Esconde campos de entrada */
+        textarea,
+        input[type="number"],
+        div[data-baseweb="input"],
+        label {
+            display: none !important;
+        }
 
-if "texto_pago" not in st.session_state:
-    st.session_state["texto_pago"] = ""
+        /* Quebra de página antes das contas pagas */
+        .pagina-contas-pagas {
+            page-break-before: always;
+            break-before: page;
+        }
+        </style>
+    """, unsafe_allow_html=True)
 
-# =============================
-# RESET
-# =============================
-if st.session_state["etapa"] == 3:
-    if st.button("📄 Outro documento"):
-        st.session_state.clear()
-        st.rerun()
-
-# =============================
-# ETAPA 1 — CONTAS A RECEBER
-# =============================
-if st.session_state["etapa"] == 1:
-
-    st.subheader("📋 Etapa 1 — Cole as Contas a Receber")
-
-    texto = st.text_area(
-        "Cole o relatório completo de contas a receber",
-        height=280
-    )
-
-    if texto.strip():
-        st.session_state["texto_receber"] = texto
-        st.session_state["etapa"] = 2
-        st.rerun()
+st.divider()
 
 # =============================
-# ETAPA 2 — CONTAS PAGAS (RESUMO)
+# BLOCO 1 – RECEBÍVEIS MANUAIS
 # =============================
-elif st.session_state["etapa"] == 2:
+st.subheader("💰 Recebíveis (Manual)")
 
-    st.subheader("📋 Etapa 2 — Cole o resumo das Contas Pagas")
+c1, c2 = st.columns(2)
 
-    texto = st.text_area(
-        "Cole exatamente como vem do Excel (Categoria | Valor | %)",
-        height=260
-    )
+with c1:
+    recebido_manual = st.number_input("Recebidos", min_value=0.0, format="%.2f")
 
-    if texto.strip():
-        st.session_state["texto_pago"] = texto
-        st.session_state["etapa"] = 3
-        st.rerun()
+with c2:
+    a_receber_manual = st.number_input("A receber", min_value=0.0, format="%.2f")
 
 # =============================
-# ETAPA 3 — DASHBOARD
+# KPIs VISUAIS
 # =============================
-elif st.session_state["etapa"] == 3:
+st.markdown("""
+<style>
+.kpi-card {
+    padding: 24px;
+    border-radius: 14px;
+    background: linear-gradient(135deg, #1f2933, #111827);
+    box-shadow: 0 8px 20px rgba(0,0,0,0.35);
+    text-align: center;
+}
+.kpi-title {
+    font-size: 15px;
+    color: #9ca3af;
+}
+.kpi-value {
+    font-size: 32px;
+    font-weight: 700;
+    color: #f9fafb;
+}
+</style>
+""", unsafe_allow_html=True)
 
-    # =====================================================
-    # CONTAS A RECEBER
-    # =====================================================
-    df = pd.read_csv(
-        StringIO(st.session_state["texto_receber"]),
-        sep="\t",
-        decimal=","
-    )
+k1, k2 = st.columns(2)
 
-    df.columns = (
-        df.columns
-        .str.strip()
-        .str.lower()
-        .str.replace(" ", "_")
-    )
+with k1:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">💵 Total Recebidos</div>
+        <div class="kpi-value">R$ {recebido_manual:,.2f}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    df["vencimento"] = pd.to_datetime(df["vencimento"], dayfirst=True, errors="coerce")
-    df["saldo"] = pd.to_numeric(df["saldo"], errors="coerce").fillna(0)
-    df["recebido"] = pd.to_numeric(df["recebido"], errors="coerce").fillna(0)
+with k2:
+    st.markdown(f"""
+    <div class="kpi-card">
+        <div class="kpi-title">⏳ Total a Receber</div>
+        <div class="kpi-value">R$ {a_receber_manual:,.2f}</div>
+    </div>
+    """, unsafe_allow_html=True)
 
-    hoje = pd.Timestamp.today().normalize()
+st.divider()
 
-    total_recebido = df["recebido"].sum()
-    a_receber = df[df["vencimento"] > hoje]
-    total_a_receber = a_receber["saldo"].sum()
+# =============================
+# PRÓXIMA SEMANA – VIA COLAGEM
+# =============================
+st.subheader("📅 Recebíveis da Próxima Semana")
 
-    inicio = hoje + timedelta(days=1)
-    fim = hoje + timedelta(days=6)
+texto_semana = st.text_area(
+    "Cole aqui o relatório bruto da próxima semana",
+    height=320
+)
 
-    prox_semana = a_receber[
-        (a_receber["vencimento"] >= inicio) &
-        (a_receber["vencimento"] <= fim)
-    ]
+dados_semana = []
+data_atual = None
 
-    total_semana = prox_semana["saldo"].sum()
+if texto_semana.strip():
+    for linha in texto_semana.splitlines():
+        linha = linha.strip()
 
-    grafico_semana = (
-        prox_semana
-        .groupby("vencimento")["saldo"]
-        .sum()
-        .reset_index()
-        .sort_values("vencimento")
-    )
-
-    grafico_semana["dia"] = grafico_semana["vencimento"].dt.strftime("%d")
-
-    mensal = (
-        a_receber
-        .assign(mes=a_receber["vencimento"].dt.to_period("M"))
-        .groupby("mes")["saldo"]
-        .sum()
-        .reset_index()
-    )
-
-    mensal["mes"] = mensal["mes"].dt.to_timestamp()
-    mensal["mes_extenso"] = mensal["mes"].dt.strftime("%B / %Y").str.capitalize()
-
-    st.subheader("📈 Contas a Receber")
-
-    c1, c2, c3 = st.columns(3)
-    c1.metric("💰 Recebido", f"R$ {total_recebido:,.2f}")
-    c2.metric("⏳ A Receber Total", f"R$ {total_a_receber:,.2f}")
-    c3.metric("📅 Próxima Semana", f"R$ {total_semana:,.2f}")
-
-    st.subheader("📊 Próximos 7 Dias")
-    if grafico_semana.empty:
-        st.info("Nenhum valor a receber na próxima semana.")
-    else:
-        st.bar_chart(grafico_semana.set_index("dia")["saldo"])
-
-    st.subheader("📆 A Receber por Mês")
-    st.dataframe(
-        mensal[["mes_extenso", "saldo"]]
-        .rename(columns={"mes_extenso": "Mês", "saldo": "Saldo"}),
-        use_container_width=True
-    )
-
-    # =====================================================
-    # CONTAS PAGAS — SAÍDAS (FORMATO EXCEL)
-    # =====================================================
-    st.divider()
-    st.subheader("🔴 Contas Pagas — Saídas por Categoria")
-
-    linhas = st.session_state["texto_pago"].splitlines()
-    dados = []
-
-    for l in linhas:
-        l = l.strip()
-
-        # ignora lixo
-        if not l:
-            continue
-        if l.lower() in ["categoria", "saídas"]:
-            continue
-        if "porcentagem" in l.lower():
+        if not linha:
             continue
 
-        partes = l.split("\t")
+        if re.fullmatch(r"\d{2}/\d{2}/\d{4}", linha):
+            try:
+                data_atual = datetime.strptime(linha, "%d/%m/%Y")
+            except:
+                data_atual = None
+            continue
+
+        linha_lower = linha.lower()
+
+        if (
+            "cliente" in linha_lower
+            or linha_lower.startswith("total")
+            or data_atual is None
+        ):
+            continue
+
+        valores = re.findall(r"\d{1,3}(?:\.\d{3})*,\d{2}", linha)
+
+        if len(valores) >= 2:
+            saldo_raw = valores[-2].replace(".", "").replace(",", ".")
+            try:
+                saldo = float(saldo_raw)
+                dados_semana.append([data_atual, saldo])
+            except:
+                pass
+
+    if dados_semana:
+        df_semana = pd.DataFrame(dados_semana, columns=["data", "saldo"])
+
+        resumo_semana = (
+            df_semana
+            .groupby("data")["saldo"]
+            .sum()
+            .reset_index()
+            .sort_values("data")
+        )
+
+        resumo_semana["data_label"] = resumo_semana["data"].dt.strftime("%d/%m")
+        total_semana = resumo_semana["saldo"].sum()
+
+        st.metric("📅 Total da próxima semana", f"R$ {total_semana:,.2f}")
+
+        st.bar_chart(
+            resumo_semana.set_index("data_label")["saldo"]
+        )
+
+st.divider()
+
+# =============================
+# BLOCO 2 – CONTAS PAGAS (SAÍDAS)
+# =============================
+st.markdown('<div class="pagina-contas-pagas">', unsafe_allow_html=True)
+
+st.subheader("💸 Contas Pagas – Saídas")
+
+texto_pagamentos = st.text_area(
+    "Cole aqui o bloco de SAÍDAS",
+    height=250
+)
+
+if texto_pagamentos.strip():
+    registros = []
+
+    for linha in texto_pagamentos.splitlines():
+        linha = linha.strip()
+        linha_lower = linha.lower()
+
+        if (
+            not linha
+            or linha_lower.startswith("saídas")
+            or linha_lower.startswith("total")
+        ):
+            continue
+
+        partes = re.split(r"\t+|\s{2,}", linha)
 
         if len(partes) >= 2:
             categoria = partes[0].strip()
-            valor = partes[1].strip()
-            percentual = partes[2].strip() if len(partes) > 2 else None
+            valor_raw = partes[1].replace(".", "").replace(",", ".")
 
-            dados.append([categoria, valor, percentual])
+            try:
+                valor = float(valor_raw)
+                registros.append([categoria, valor])
+            except:
+                pass
 
-    df_pago = pd.DataFrame(
-        dados,
-        columns=["categoria", "valor", "percentual"]
-    )
+    if registros:
+        df_saida = pd.DataFrame(registros, columns=["Categoria", "Valor"])
+        total_saida = df_saida["Valor"].sum()
 
-    # conversão PT-BR
-    df_pago["valor"] = (
-        df_pago["valor"]
-        .astype(str)
-        .str.replace(".", "", regex=False)
-        .str.replace(",", ".", regex=False)
-    )
+        st.metric("🔴 Total de Saídas", f"R$ {total_saida:,.2f}")
 
-    df_pago["valor"] = pd.to_numeric(df_pago["valor"], errors="coerce").fillna(0)
+        st.dataframe(
+            df_saida.sort_values("Valor", ascending=False),
+            use_container_width=True
+        )
 
-    df_pago["percentual"] = (
-        df_pago["percentual"]
-        .astype(str)
-        .str.replace(",", ".", regex=False)
-    )
-
-    df_pago["percentual"] = pd.to_numeric(df_pago["percentual"], errors="coerce")
-
-    # remove linhas inválidas
-    df_pago = df_pago[df_pago["valor"] > 0]
-
-    total_gastos = df_pago["valor"].sum()
-
-    st.metric("💸 Total de Gastos", f"R$ {total_gastos:,.2f}")
-
-    st.dataframe(
-        df_pago.rename(columns={
-            "categoria": "Categoria",
-            "valor": "Valor",
-            "percentual": "Porcentagem %"
-        }),
-        use_container_width=True
-    )
-
+st.markdown('</div>', unsafe_allow_html=True)
