@@ -25,7 +25,6 @@ modo_impressao = st.toggle("Modo impressão (para print/PDF)")
 if modo_impressao:
     st.markdown("""
         <style>
-        /* ESCONDE APENAS CAMPOS DE ENTRADA (NÃO textos, NÃO métricas) */
         textarea,
         input[type="number"],
         div[data-baseweb="input"],
@@ -33,7 +32,6 @@ if modo_impressao:
             display: none !important;
         }
 
-        /* Quebra de página antes das contas pagas */
         .pagina-contas-pagas {
             page-break-before: always;
             break-before: page;
@@ -217,9 +215,9 @@ if texto_pagamentos.strip():
 
         st.metric("🔴 Total de Saídas", f"R$ {total_saida:,.2f}")
 
-        st.dataframe(
-            df_saida.sort_values("Valor", ascending=False),
-            use_container_width=True
+        # 🔥 ALTERAÇÃO AQUI (sem scroll)
+        st.table(
+            df_saida.sort_values("Valor", ascending=False)
         )
 
 st.markdown('</div>', unsafe_allow_html=True)
